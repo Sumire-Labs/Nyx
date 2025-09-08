@@ -11,6 +11,7 @@ import (
 	"github.com/Sumire-Labs/Nyx/bot"
 	"github.com/Sumire-Labs/Nyx/commands"
 	"github.com/Sumire-Labs/Nyx/database"
+	"github.com/Sumire-Labs/Nyx/di"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,33 +60,74 @@ func main() {
 		os.Exit(1)
 	}
 	
-	logLevel := parseLogLevel(config.Logging.Level)
-	log = logger.New("Nyx", logLevel)
+	// 🚀 DIコンテナを初期化
+	container := di.NewContainer()
 	
-	if config.Logging.File != "" {
-		if err := log.SetFileOutput(config.Logging.File); err != nil {
-			log.Warn("Failed to set file output: %v", err)
-		}
+	// DIコンテナ用の設定を変換
+	diConfig := &di.Config{
+		Bot: struct {
+			Token        string
+			Prefix       string
+			Status       string
+			ActivityType string
+			ActivityName string
+			OwnerIDs     []string
+		}{
+			Token:        config.Bot.Token,
+			Prefix:       config.Bot.Prefix,
+			Status:       config.Bot.Status,
+			ActivityType: config.Bot.Activity.Type,
+			ActivityName: config.Bot.Activity.Name,
+			OwnerIDs:     config.OwnerIDs,
+		},
+		Database: struct {
+			Path string
+		}{
+			Path: config.Database.Path,
+		},
+		Logging: struct {
+			Level      string
+			File       string
+			WebhookURL string
+		}{
+			Level:      config.Logging.Level,
+			File:       config.Logging.File,
+			WebhookURL: config.Logging.WebhookURL,
+		},
+		Features: struct {
+			SlashCommands  bool
+			LoggingChannel string
+		}{
+			SlashCommands:  config.Features.SlashCommands,
+			LoggingChannel: config.Features.LoggingChannel,
+		},
 	}
 	
-	if config.Logging.WebhookURL != "" {
-		log.SetWebhook(config.Logging.WebhookURL, "Nyx Bot", "")
+	// 🔧 サービスを登録
+	if err := di.RegisterServices(container, diConfig); err != nil {
+		fmt.Printf("Failed to register services: %v\n", err)
+		os.Exit(1)
 	}
 	
-	log.Info("Starting Nyx Bot...")
+	// 🎯 ServiceLocatorを作成
+	serviceLocator := di.NewServiceLocator(container)
 	
-	db, err := database.New(config.Database.Path)
-	if err != nil {
-		log.Fatal("Failed to initialize database: %v", err)
-	}
+	// 📋 サービスを取得
+	log = serviceLocator.Logger().(*logger.Logger)
+	log.Info("🚀 Starting Nyx Bot with Dependency Injection...")
+	
+	db := serviceLocator.Database().(*database.Database)
 	defer db.Close()
+	log.Info("✅ Database initialized")
 	
-	log.Info("Database initialized")
+	commandService := serviceLocator.Commands()
+	log.Info("📋 Registered %d commands", commandService.Count())
 	
-	commandRegistry := commands.NewRegistry()
-	commandRegistry.RegisterDefaultCommands()
-	log.Info("Registered %d commands", commandRegistry.Count())
+	// 実際の Registry を取得（Bot設定用）
+	commandRegistry, _ := container.Get("Commands")
+	registry := commandRegistry.(*commands.Registry)
 	
+	// 🤖 Botインスタンスを作成（完全DI対応）
 	botInstance, err := bot.New(bot.Config{
 		Token:          config.Bot.Token,
 		Prefix:         config.Bot.Prefix,
@@ -93,33 +135,34 @@ func main() {
 		ActivityType:   config.Bot.Activity.Type,
 		ActivityName:   config.Bot.Activity.Name,
 		Database:       db,
-		Commands:       commandRegistry,
+		Commands:       registry,
 		Logger:         log,
+		Services:       serviceLocator,  // 🎯 DI ServiceLocator設定
 		SlashCommands:  config.Features.SlashCommands,
 		LoggingChannel: config.Features.LoggingChannel,
 		OwnerIDs:       config.OwnerIDs,
 	})
 	
 	if err != nil {
-		log.Fatal("Failed to create bot: %v", err)
+		log.Fatal("❌ Failed to create bot: %v", err)
 	}
 	
 	if err := botInstance.Start(); err != nil {
-		log.Fatal("Failed to start bot: %v", err)
+		log.Fatal("❌ Failed to start bot: %v", err)
 	}
 	
-	log.Info("Bot is now running. Press CTRL+C to exit.")
+	log.Info("✅ Nyx Bot is now running with DI! Press CTRL+C to exit.")
 	
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 	
-	log.Info("Shutting down bot...")
+	log.Info("🛑 Shutting down bot...")
 	if err := botInstance.Stop(); err != nil {
-		log.Error("Error during shutdown: %v", err)
+		log.Error("❌ Error during shutdown: %v", err)
 	}
 	
-	log.Info("Bot shut down successfully")
+	log.Info("✅ Bot shut down successfully")
 }
 
 func loadConfig(path string) (*Config, error) {

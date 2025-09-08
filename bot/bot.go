@@ -7,18 +7,22 @@ import (
 	"github.com/Sumire-Labs/Nyx-API/logger"
 	"github.com/Sumire-Labs/Nyx/commands"
 	"github.com/Sumire-Labs/Nyx/database"
+	"github.com/Sumire-Labs/Nyx/services"
 	"github.com/bwmarrin/discordgo"
 )
 
 type Bot struct {
 	session      *discordgo.Session
 	config       Config
-	db           *database.Database
-	commands     *commands.Registry
-	logger       *logger.Logger
+	services     services.ServiceLocator  // DI サービスロケーター
 	ready        bool
 	messageCache map[string]string                      // メッセージID -> 内容
 	memberCache  map[string]*discordgo.Member           // guildID:userID -> Member
+	
+	// 後方互換性のためのキャッシュフィールド
+	db           *database.Database
+	commands     *commands.Registry
+	logger       *logger.Logger
 }
 
 type Config struct {
@@ -30,6 +34,7 @@ type Config struct {
 	Database       *database.Database
 	Commands       *commands.Registry
 	Logger         *logger.Logger
+	Services       services.ServiceLocator  // DI サービスロケーター
 	SlashCommands  bool
 	LoggingChannel string
 	OwnerIDs       []string
@@ -44,12 +49,14 @@ func New(config Config) (*Bot, error) {
 	bot := &Bot{
 		session:      session,
 		config:       config,
-		db:           config.Database,
-		commands:     config.Commands,
-		logger:       config.Logger,
+		services:     config.Services,
 		ready:        false,
 		messageCache: make(map[string]string),
 		memberCache:  make(map[string]*discordgo.Member),
+		// 後方互換性キャッシュ
+		db:           config.Database,
+		commands:     config.Commands,
+		logger:       config.Logger,
 	}
 	
 	session.AddHandler(bot.onReady)
@@ -85,9 +92,9 @@ func (b *Bot) Start() error {
 
 func (b *Bot) Stop() error {
 	if b.config.SlashCommands {
-		b.logger.Info("Removing slash commands...")
+		b.getLogger().Info("Removing slash commands...")
 		if err := b.removeSlashCommands(); err != nil {
-			b.logger.Error("Failed to remove slash commands: %v", err)
+			b.getLogger().Error("Failed to remove slash commands: %v", err)
 		}
 	}
 	
@@ -95,17 +102,17 @@ func (b *Bot) Stop() error {
 }
 
 func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
-	b.logger.Info("Bot is ready! Logged in as %s#%s (%s)", r.User.Username, r.User.Discriminator, r.User.ID)
+	b.getLogger().Info("Bot is ready! Logged in as %s#%s (%s)", r.User.Username, r.User.Discriminator, r.User.ID)
 	
 	if err := b.updateStatus(); err != nil {
-		b.logger.Error("Failed to update status: %v", err)
+		b.getLogger().Error("Failed to update status: %v", err)
 	}
 	
 	if b.config.SlashCommands {
 		if err := b.registerSlashCommands(); err != nil {
-			b.logger.Error("Failed to register slash commands: %v", err)
+			b.getLogger().Error("Failed to register slash commands: %v", err)
 		} else {
-			b.logger.Info("Slash commands registered successfully")
+			b.getLogger().Info("Slash commands registered successfully")
 		}
 	}
 	
@@ -140,43 +147,71 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	cmdName := strings.ToLower(parts[0])
 	args := parts[1:]
 	
-	cmd, exists := b.commands.GetCommand(cmdName)
+	cmd, exists := b.getCommands().GetCommand(cmdName)
 	if !exists {
 		return
 	}
 	
-	ctx := &commands.Context{
-		Session: s,
-		Message: m.Message,
-		Args:    args,
-		Bot:     b.toBotInterface(),
-		Logger:  b.logger,
-		DB:      b.db,
+	// DI対応の新しいContextを使用（後方互換性維持）
+	var ctx interface{}
+	if b.services != nil {
+		// DI版Contextを使用
+		ctx = commands.NewDIContext(s, m.Message, args, b.services)
+	} else {
+		// 既存版Contextを使用（後方互換性）
+		ctx = &commands.Context{
+			Session: s,
+			Message: m.Message,
+			Args:    args,
+			Bot:     b.toBotInterface(),
+			Logger:  b.getLogger(),
+			DB:      b.getDatabase(),
+		}
 	}
 	
 	if cmd.OwnerOnly && !b.isOwner(m.Author.ID) {
-		ctx.ReplyError("このコマンドはBot所有者のみ実行できます。")
+		if diCtx, ok := ctx.(*commands.DIContext); ok {
+			diCtx.ReplyError("このコマンドはBot所有者のみ実行できます。")
+		} else if oldCtx, ok := ctx.(*commands.Context); ok {
+			oldCtx.ReplyError("このコマンドはBot所有者のみ実行できます。")
+		}
 		return
 	}
 	
 	if cmd.RequiredPermissions != 0 {
 		perms, err := s.UserChannelPermissions(m.Author.ID, m.ChannelID)
 		if err != nil {
-			b.logger.Error("Failed to get user permissions: %v", err)
+			b.getLogger().Error("Failed to get user permissions: %v", err)
 			return
 		}
 		
 		if perms&cmd.RequiredPermissions != cmd.RequiredPermissions && perms&discordgo.PermissionAdministrator == 0 {
-			ctx.ReplyError("このコマンドを実行する権限がありません。")
+			if diCtx, ok := ctx.(*commands.DIContext); ok {
+				diCtx.ReplyError("このコマンドを実行する権限がありません。")
+			} else if oldCtx, ok := ctx.(*commands.Context); ok {
+				oldCtx.ReplyError("このコマンドを実行する権限がありません。")
+			}
 			return
 		}
 	}
 	
-	b.logger.Info("Command executed: %s by %s in %s", cmdName, m.Author.ID, m.GuildID)
+	b.getLogger().Info("Command executed: %s by %s in %s", cmdName, m.Author.ID, m.GuildID)
 	
-	if err := cmd.Execute(ctx); err != nil {
-		b.logger.Error("Command error (%s): %v", cmdName, err)
-		ctx.ReplyError(fmt.Sprintf("コマンド実行中にエラーが発生しました: %v", err))
+	var err error
+	if diCtx, ok := ctx.(*commands.DIContext); ok {
+		// DI Context を既存 Context に変換して実行
+		err = cmd.Execute(diCtx.AsLegacyContext())
+	} else if oldCtx, ok := ctx.(*commands.Context); ok {
+		err = cmd.Execute(oldCtx)
+	}
+	
+	if err != nil {
+		b.getLogger().Error("Command error (%s): %v", cmdName, err)
+		if diCtx, ok := ctx.(*commands.DIContext); ok {
+			diCtx.ReplyError(fmt.Sprintf("コマンド実行中にエラーが発生しました: %v", err))
+		} else if oldCtx, ok := ctx.(*commands.Context); ok {
+			oldCtx.ReplyError(fmt.Sprintf("コマンド実行中にエラーが発生しました: %v", err))
+		}
 	}
 }
 
@@ -191,7 +226,7 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 
 func (b *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	cmdName := i.ApplicationCommandData().Name
-	cmd, exists := b.commands.GetCommand(cmdName)
+	cmd, exists := b.getCommands().GetCommand(cmdName)
 	if !exists {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -203,24 +238,48 @@ func (b *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionC
 		return
 	}
 	
-	ctx := &commands.SlashContext{
-		Session:     s,
-		Interaction: i.Interaction,
-		Bot:         b.toBotInterface(),
-		Logger:      b.logger,
-		DB:          b.db,
+	// DI対応の新しいSlashContextを使用（後方互換性維持）
+	var ctx interface{}
+	if b.services != nil {
+		// DI版SlashContextを使用
+		ctx = commands.NewDISlashContext(s, i.Interaction, b.services)
+	} else {
+		// 既存版SlashContextを使用（後方互換性）
+		ctx = &commands.SlashContext{
+			Session:     s,
+			Interaction: i.Interaction,
+			Bot:         b.toBotInterface(),
+			Logger:      b.getLogger(),
+			DB:          b.getDatabase(),
+		}
 	}
 	
 	if cmd.OwnerOnly && !b.isOwner(i.Member.User.ID) {
-		ctx.ReplyError("このコマンドはBot所有者のみ実行できます。", true)
+		if diCtx, ok := ctx.(*commands.DISlashContext); ok {
+			diCtx.ReplyError("このコマンドはBot所有者のみ実行できます。", true)
+		} else if oldCtx, ok := ctx.(*commands.SlashContext); ok {
+			oldCtx.ReplyError("このコマンドはBot所有者のみ実行できます。", true)
+		}
 		return
 	}
 	
-	b.logger.Info("Slash command executed: %s by %s in %s", cmdName, i.Member.User.ID, i.GuildID)
+	b.getLogger().Info("Slash command executed: %s by %s in %s", cmdName, i.Member.User.ID, i.GuildID)
 	
-	if err := cmd.ExecuteSlash(ctx); err != nil {
-		b.logger.Error("Slash command error (%s): %v", cmdName, err)
-		ctx.ReplyError(fmt.Sprintf("コマンド実行中にエラーが発生しました: %v", err), true)
+	var err error
+	if diCtx, ok := ctx.(*commands.DISlashContext); ok {
+		// DI SlashContext を既存 SlashContext に変換して実行
+		err = cmd.ExecuteSlash(diCtx.AsLegacySlashContext())
+	} else if oldCtx, ok := ctx.(*commands.SlashContext); ok {
+		err = cmd.ExecuteSlash(oldCtx)
+	}
+	
+	if err != nil {
+		b.getLogger().Error("Slash command error (%s): %v", cmdName, err)
+		if diCtx, ok := ctx.(*commands.DISlashContext); ok {
+			diCtx.ReplyError(fmt.Sprintf("コマンド実行中にエラーが発生しました: %v", err), true)
+		} else if oldCtx, ok := ctx.(*commands.SlashContext); ok {
+			oldCtx.ReplyError(fmt.Sprintf("コマンド実行中にエラーが発生しました: %v", err), true)
+		}
 	}
 }
 
@@ -282,7 +341,7 @@ func (b *Bot) updateStatus() error {
 }
 
 func (b *Bot) registerSlashCommands() error {
-	for _, cmd := range b.commands.GetAll() {
+	for _, cmd := range b.getCommands().GetAll() {
 		if cmd.SlashCommand == nil {
 			continue
 		}
@@ -303,7 +362,7 @@ func (b *Bot) removeSlashCommands() error {
 	
 	for _, cmd := range registeredCmds {
 		if err := b.session.ApplicationCommandDelete(b.session.State.User.ID, "", cmd.ID); err != nil {
-			b.logger.Error("Failed to delete slash command %s: %v", cmd.Name, err)
+			b.getLogger().Error("Failed to delete slash command %s: %v", cmd.Name, err)
 		}
 	}
 	return nil
@@ -336,4 +395,52 @@ func (bi *botInterface) IsOwner(userID string) bool {
 
 func (bi *botInterface) GetSession() *discordgo.Session {
 	return bi.bot.session
+}
+
+// BotService インターフェースの実装メソッド
+
+func (b *Bot) GetPrefix() string {
+	return b.config.Prefix
+}
+
+func (b *Bot) IsOwner(userID string) bool {
+	return b.isOwner(userID)
+}
+
+func (b *Bot) GetSession() *discordgo.Session {
+	return b.session
+}
+
+func (b *Bot) IsReady() bool {
+	return b.ready
+}
+
+// DIサービスアクセスメソッド
+
+func (b *Bot) getDatabase() *database.Database {
+	if b.services != nil {
+		return b.services.Database().(*database.Database)
+	}
+	return b.db // 後方互換性
+}
+
+func (b *Bot) getCommands() *commands.Registry {
+	if b.services != nil {
+		// 後方互換性のため、キャッシュされた Registry を使用
+		if b.commands != nil {
+			return b.commands
+		}
+		// フォールバック: 新しい Registry を作成
+		registry := commands.NewRegistry()
+		registry.RegisterDefaultCommands()
+		return registry
+	}
+	return b.commands // 後方互換性
+}
+
+func (b *Bot) getLogger() *logger.Logger {
+	if b.services != nil {
+		return b.services.Logger().(*logger.Logger)
+	}
+	return b.logger // 後方互換性
 }

@@ -623,3 +623,123 @@ func (d *Database) GetRecentServerLogs(guildID, eventType string, limit int) ([]
 	
 	return logs, nil
 }
+
+// DatabaseService インターフェースの追加実装メソッド
+
+func (d *Database) CreateGuild(guild *Guild) error {
+	return d.CreateOrUpdateGuild(guild)
+}
+
+func (d *Database) UpdateGuild(guild *Guild) error {
+	return d.CreateOrUpdateGuild(guild)
+}
+
+func (d *Database) DeleteGuild(guildID string) error {
+	query := `DELETE FROM guilds WHERE id = ?`
+	_, err := d.db.Exec(query, guildID)
+	return err
+}
+
+func (d *Database) CreateLogSettings(settings *LogSettings) error {
+	return d.CreateOrUpdateLogSettings(settings)
+}
+
+func (d *Database) UpdateLogSettings(settings *LogSettings) error {
+	return d.CreateOrUpdateLogSettings(settings)
+}
+
+func (d *Database) DeleteLogSettings(guildID string) error {
+	query := `DELETE FROM log_settings WHERE guild_id = ?`
+	_, err := d.db.Exec(query, guildID)
+	return err
+}
+
+func (d *Database) GetServerLogs(guildID string, limit int) ([]*ServerLog, error) {
+	return d.GetRecentServerLogs(guildID, "", limit)
+}
+
+func (d *Database) GetTicketPanel(messageID string) (*TicketPanel, error) {
+	return d.GetTicketPanelByMessage(messageID)
+}
+
+func (d *Database) DeleteTicketPanel(messageID string) error {
+	query := `DELETE FROM ticket_panels WHERE message_id = ?`
+	_, err := d.db.Exec(query, messageID)
+	return err
+}
+
+func (d *Database) GetAllTicketPanels() ([]*TicketPanel, error) {
+	query := `SELECT id, guild_id, channel_id, message_id, title, description, created_at
+			  FROM ticket_panels ORDER BY created_at DESC`
+	
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var panels []*TicketPanel
+	for rows.Next() {
+		var panel TicketPanel
+		err := rows.Scan(
+			&panel.ID,
+			&panel.GuildID,
+			&panel.ChannelID,
+			&panel.MessageID,
+			&panel.Title,
+			&panel.Description,
+			&panel.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		panels = append(panels, &panel)
+	}
+	
+	return panels, nil
+}
+
+func (d *Database) UpdateTicket(ticket *Ticket) error {
+	query := `UPDATE tickets SET title = ?, status = ? WHERE channel_id = ?`
+	_, err := d.db.Exec(query, ticket.Title, ticket.Status, ticket.ChannelID)
+	return err
+}
+
+func (d *Database) DeleteTicket(channelID string) error {
+	query := `DELETE FROM tickets WHERE channel_id = ?`
+	_, err := d.db.Exec(query, channelID)
+	return err
+}
+
+func (d *Database) GetUserTickets(userID string) ([]*Ticket, error) {
+	query := `SELECT id, guild_id, user_id, channel_id, title, status, created_at, closed_at, closed_by
+			  FROM tickets WHERE user_id = ? ORDER BY created_at DESC`
+	
+	rows, err := d.db.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var tickets []*Ticket
+	for rows.Next() {
+		var ticket Ticket
+		err := rows.Scan(
+			&ticket.ID,
+			&ticket.GuildID,
+			&ticket.UserID,
+			&ticket.ChannelID,
+			&ticket.Title,
+			&ticket.Status,
+			&ticket.CreatedAt,
+			&ticket.ClosedAt,
+			&ticket.ClosedBy,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, &ticket)
+	}
+	
+	return tickets, nil
+}
