@@ -1,0 +1,93 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":automergeDigests",
+    ":automergeBranch"
+  ],
+  "timezone": "Asia/Tokyo",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "assignees": [],
+  "reviewers": [],
+  "packageRules": [
+    {
+      "description": "Go modules - 毎週チェック",
+      "matchManagers": ["gomod"],
+      "rangeStrategy": "bump",
+      "separateMinorPatch": true,
+      "prCreation": "immediate"
+    },
+    {
+      "description": "メジャーバージョンアップデート - 手動承認必須",
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["major-update"],
+      "automerge": false,
+      "prCreation": "immediate"
+    },
+    {
+      "description": "マイナー・パッチアップデート - 自動マージ対象",
+      "matchUpdateTypes": ["minor", "patch"],
+      "addLabels": ["auto-merge"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    {
+      "description": "GitHub Actions - 自動アップデート",
+      "matchManagers": ["github-actions"],
+      "addLabels": ["github-actions"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    {
+      "description": "重要な依存関係 - 即座にPR作成",
+      "matchPackageNames": [
+        "github.com/bwmarrin/discordgo",
+        "github.com/Sumire-Labs/Nyx-API"
+      ],
+      "prCreation": "immediate",
+      "addLabels": ["critical-dependency"]
+    },
+    {
+      "description": "セキュリティアップデート - 最高優先度",
+      "matchDatasources": ["go"],
+      "matchUpdateTypes": ["patch"],
+      "matchCurrentVersion": "!/^0\\./",
+      "addLabels": ["security"],
+      "prPriority": 10,
+      "automerge": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security", "vulnerability"],
+    "assignees": [],
+    "prCreation": "immediate",
+    "automerge": false
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on the first day of the month"
+    ],
+    "addLabels": ["lockfile-maintenance"]
+  },
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "commitMessagePrefix": "chore(deps):",
+  "commitMessageAction": "update",
+  "commitMessageExtra": "to {{newVersion}}",
+  "prTitle": "{{commitMessagePrefix}} {{commitMessageAction}} {{depName}} {{commitMessageExtra}}",
+  "prBodyTemplate": "この PR は {{depName}} を {{currentVersion}} から {{newVersion}} にアップデートします。\n\n{{#if releases}}\n## リリースノート\n\n{{#each releases}}\n### {{title}}\n{{#if body}}\n{{body}}\n{{/if}}\n{{/each}}\n{{/if}}\n\n{{#if hasReleaseNotes}}\n---\n\n📅 **スケジュール**: {{schedule}}\n🏷️ **ブランチ**: {{branchName}}\n🤖 **Renovate**: [設定ファイル](.github/renovate.json)\n{{/if}}",
+  "platformAutomerge": true,
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "🔄 Dependency Dashboard",
+  "dependencyDashboardHeader": "このダッシュボードは依存関係のアップデート状況を表示します。\n\n- 🟢 **自動マージ対象**: マイナー・パッチアップデート\n- 🟡 **要確認**: メジャーアップデート\n- 🔴 **セキュリティ**: 脆弱性対応",
+  "dependencyDashboardFooter": "---\n\n🤖 このダッシュボードは [Renovate](https://github.com/renovatebot/renovate) によって自動管理されています。",
+  "gitAuthor": "renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>"
+}
