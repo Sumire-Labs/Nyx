@@ -1,0 +1,35 @@
+# Nyx Bot 設定ファイル例
+# このファイルをコピーして config.yaml として保存し、適切な値を設定してください
+
+bot:
+  token: "YOUR_BOT_TOKEN_HERE"  # Discord Developer Portal から取得したBot Token
+  prefix: "!"                   # コマンドプレフィックス
+  status: "online"              # Bot のステータス (online, idle, dnd, invisible)
+  activity:
+    type: "playing"             # アクティビティタイプ (playing, streaming, listening, watching, competing)
+    name: "Nyx Bot | !help"     # アクティビティ表示名
+
+# データベース設定
+database:
+  path: "./db/bot.db"          # SQLite データベースファイルのパス
+
+# ログ設定
+logging:
+  level: "info"                # ログレベル (debug, info, warn, error)
+  file: "./logs/bot.log"       # ログファイルのパス (空文字で無効化)
+  webhook_url: ""              # エラーログ送信用 Discord Webhook URL (オプション)
+
+# 機能設定
+features:
+  slash_commands: true         # スラッシュコマンドを有効にするかどうか
+  auto_role: false             # 自動ロール付与機能 (未実装)
+  welcome_message: false       # 歓迎メッセージ機能 (未実装)
+  logging_channel: ""          # Bot ログ送信用チャンネル ID (オプション)
+
+# Bot 所有者の Discord ID リスト
+owner_ids:
+  - "YOUR_DISCORD_USER_ID"     # あなたの Discord ユーザー ID
+  # - "ANOTHER_OWNER_ID"       # 追加の所有者 ID (必要に応じて)
+
+# データベーススキーマバージョン (自動管理、変更不要)
+# schema_version: 1
