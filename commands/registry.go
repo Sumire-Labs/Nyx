@@ -93,54 +93,7 @@ func (r *Registry) GetByCategory(category string) []*Command {
 }
 
 func (r *Registry) RegisterDefaultCommands() {
-	r.Register(&Command{
-		Name:         "ping",
-		Description:  "Botの応答速度を確認します",
-		Usage:        "ping",
-		Category:     "general",
-		Execute:      r.pingCommand,
-		ExecuteSlash: r.pingSlashCommand,
-		SlashCommand: &discordgo.ApplicationCommand{
-			Name:        "ping",
-			Description: "Botの応答速度を確認します",
-		},
-	})
-
-	r.Register(&Command{
-		Name:         "help",
-		Description:  "利用可能なコマンド一覧を表示します",
-		Usage:        "help [コマンド名]",
-		Aliases:      []string{"h", "commands"},
-		Category:     "general",
-		Execute:      r.helpCommand,
-		ExecuteSlash: r.helpSlashCommand,
-		SlashCommand: &discordgo.ApplicationCommand{
-			Name:        "help",
-			Description: "利用可能なコマンド一覧を表示します",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "command",
-					Description: "詳細を表示したいコマンド名",
-					Required:    false,
-				},
-			},
-		},
-	})
-
-	r.Register(&Command{
-		Name:                "stats",
-		Description:         "Botの統計情報を表示します",
-		Usage:               "stats",
-		Category:            "general",
-		RequiredPermissions: discordgo.PermissionManageMessages,
-		Execute:             r.statsCommand,
-		ExecuteSlash:        r.statsSlashCommand,
-		SlashCommand: &discordgo.ApplicationCommand{
-			Name:        "stats",
-			Description: "Botの統計情報を表示します",
-		},
-	})
+	// コマンドをここに追加していきます
 }
 
 func (c *Context) Reply(content string) error {
