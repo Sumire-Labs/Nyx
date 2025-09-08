@@ -1,0 +1,24 @@
+bot:
+  token: ""  # Discord Bot Token
+  prefix: "!"  # Command prefix
+  status: "online"  # online, idle, dnd, invisible
+  activity:
+    type: "playing"  # playing, streaming, listening, watching, competing
+    name: "Nyx Bot"
+  
+database:
+  path: "./db/bot.db"
+  
+logging:
+  level: "info"  # debug, info, warn, error
+  file: "./logs/bot.log"
+  webhook_url: ""  # Optional: Discord webhook for error logging
+  
+features:
+  slash_commands: true
+  auto_role: false
+  welcome_message: false
+  logging_channel: ""  # Channel ID for bot logs
+  
+owner_ids:
+  - ""  # Bot owner Discord IDs
