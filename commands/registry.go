@@ -1,9 +1,7 @@
 package commands
 
 import (
-	"fmt"
-
-	"github.com/Sumire-Labs/Nyx-API/embed"
+	nyxembed "github.com/Sumire-Labs/Nyx-API/embed"
 	"github.com/Sumire-Labs/Nyx-API/logger"
 	"github.com/Sumire-Labs/Nyx/database"
 	"github.com/bwmarrin/discordgo"
@@ -58,7 +56,7 @@ func NewRegistry() *Registry {
 
 func (r *Registry) Register(cmd *Command) {
 	r.commands[cmd.Name] = cmd
-	
+
 	for _, alias := range cmd.Aliases {
 		r.commands[alias] = cmd
 	}
@@ -84,7 +82,7 @@ func (r *Registry) Count() int {
 func (r *Registry) GetByCategory(category string) []*Command {
 	var commands []*Command
 	seen := make(map[string]bool)
-	
+
 	for _, cmd := range r.commands {
 		if cmd.Category == category && !seen[cmd.Name] {
 			commands = append(commands, cmd)
@@ -96,25 +94,25 @@ func (r *Registry) GetByCategory(category string) []*Command {
 
 func (r *Registry) RegisterDefaultCommands() {
 	r.Register(&Command{
-		Name:        "ping",
-		Description: "Botの応答速度を確認します",
-		Usage:       "ping",
-		Category:    "general",
-		Execute:     r.pingCommand,
+		Name:         "ping",
+		Description:  "Botの応答速度を確認します",
+		Usage:        "ping",
+		Category:     "general",
+		Execute:      r.pingCommand,
 		ExecuteSlash: r.pingSlashCommand,
 		SlashCommand: &discordgo.ApplicationCommand{
 			Name:        "ping",
 			Description: "Botの応答速度を確認します",
 		},
 	})
-	
+
 	r.Register(&Command{
-		Name:        "help",
-		Description: "利用可能なコマンド一覧を表示します",
-		Usage:       "help [コマンド名]",
-		Aliases:     []string{"h", "commands"},
-		Category:    "general",
-		Execute:     r.helpCommand,
+		Name:         "help",
+		Description:  "利用可能なコマンド一覧を表示します",
+		Usage:        "help [コマンド名]",
+		Aliases:      []string{"h", "commands"},
+		Category:     "general",
+		Execute:      r.helpCommand,
 		ExecuteSlash: r.helpSlashCommand,
 		SlashCommand: &discordgo.ApplicationCommand{
 			Name:        "help",
@@ -129,7 +127,7 @@ func (r *Registry) RegisterDefaultCommands() {
 			},
 		},
 	})
-	
+
 	r.Register(&Command{
 		Name:                "stats",
 		Description:         "Botの統計情報を表示します",
@@ -156,52 +154,52 @@ func (c *Context) ReplyEmbed(embed *discordgo.MessageEmbed) error {
 }
 
 func (c *Context) ReplyError(message string) error {
-	embed := embed.Error("エラー", message).Build()
+	embed := nyxembed.Error("エラー", message).Build()
 	return c.ReplyEmbed(embed)
 }
 
 func (c *Context) ReplySuccess(message string) error {
-	embed := embed.Success("成功", message).Build()
+	embed := nyxembed.Success("成功", message).Build()
 	return c.ReplyEmbed(embed)
 }
 
 func (sc *SlashContext) Reply(content string, ephemeral bool) error {
-	flags := 0
+	var flags discordgo.MessageFlags
 	if ephemeral {
 		flags = discordgo.MessageFlagsEphemeral
 	}
-	
+
 	return sc.Session.InteractionRespond(sc.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: content,
-			Flags:   discordgo.MessageFlags(flags),
+			Flags:   flags,
 		},
 	})
 }
 
 func (sc *SlashContext) ReplyEmbed(embed *discordgo.MessageEmbed, ephemeral bool) error {
-	flags := 0
+	var flags discordgo.MessageFlags
 	if ephemeral {
 		flags = discordgo.MessageFlagsEphemeral
 	}
-	
+
 	return sc.Session.InteractionRespond(sc.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{embed},
-			Flags:  discordgo.MessageFlags(flags),
+			Flags:  flags,
 		},
 	})
 }
 
 func (sc *SlashContext) ReplyError(message string, ephemeral bool) error {
-	embed := embed.Error("エラー", message).Build()
+	embed := nyxembed.Error("エラー", message).Build()
 	return sc.ReplyEmbed(embed, ephemeral)
 }
 
 func (sc *SlashContext) ReplySuccess(message string, ephemeral bool) error {
-	embed := embed.Success("成功", message).Build()
+	embed := nyxembed.Success("成功", message).Build()
 	return sc.ReplyEmbed(embed, ephemeral)
 }
 
