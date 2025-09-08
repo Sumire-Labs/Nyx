@@ -48,6 +48,28 @@ type CommandLog struct {
 	ExecutedAt   time.Time `json:"executed_at"`
 }
 
+type Ticket struct {
+	ID        int64      `json:"id"`
+	GuildID   string     `json:"guild_id"`
+	UserID    string     `json:"user_id"`
+	ChannelID string     `json:"channel_id"`
+	Title     string     `json:"title"`
+	Status    string     `json:"status"`
+	CreatedAt time.Time  `json:"created_at"`
+	ClosedAt  *time.Time `json:"closed_at"`
+	ClosedBy  *string    `json:"closed_by"`
+}
+
+type TicketPanel struct {
+	ID          int64     `json:"id"`
+	GuildID     string    `json:"guild_id"`
+	ChannelID   string    `json:"channel_id"`
+	MessageID   string    `json:"message_id"`
+	Title       string    `json:"title"`
+	Description *string   `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 func (d *Database) GetGuild(guildID string) (*Guild, error) {
 	query := `SELECT id, name, prefix, welcome_channel_id, log_channel_id, auto_role_id, created_at, updated_at 
 			  FROM guilds WHERE id = ?`
@@ -262,4 +284,149 @@ func (d *Database) GetCommandStats(guildID string, limit int) ([]CommandLog, err
 	}
 	
 	return logs, nil
+}
+
+func (d *Database) CreateTicket(ticket *Ticket) error {
+	query := `INSERT INTO tickets (guild_id, user_id, channel_id, title, status)
+			  VALUES (?, ?, ?, ?, ?)`
+	
+	result, err := d.db.Exec(query,
+		ticket.GuildID,
+		ticket.UserID,
+		ticket.ChannelID,
+		ticket.Title,
+		ticket.Status,
+	)
+	
+	if err != nil {
+		return err
+	}
+	
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	
+	ticket.ID = id
+	return nil
+}
+
+func (d *Database) GetTicket(channelID string) (*Ticket, error) {
+	query := `SELECT id, guild_id, user_id, channel_id, title, status, created_at, closed_at, closed_by
+			  FROM tickets WHERE channel_id = ?`
+	
+	var ticket Ticket
+	row := d.db.QueryRow(query, channelID)
+	err := row.Scan(
+		&ticket.ID,
+		&ticket.GuildID,
+		&ticket.UserID,
+		&ticket.ChannelID,
+		&ticket.Title,
+		&ticket.Status,
+		&ticket.CreatedAt,
+		&ticket.ClosedAt,
+		&ticket.ClosedBy,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	
+	return &ticket, nil
+}
+
+func (d *Database) GetUserOpenTickets(guildID, userID string) ([]*Ticket, error) {
+	query := `SELECT id, guild_id, user_id, channel_id, title, status, created_at, closed_at, closed_by
+			  FROM tickets WHERE guild_id = ? AND user_id = ? AND status = 'open'`
+	
+	rows, err := d.db.Query(query, guildID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var tickets []*Ticket
+	for rows.Next() {
+		var ticket Ticket
+		err := rows.Scan(
+			&ticket.ID,
+			&ticket.GuildID,
+			&ticket.UserID,
+			&ticket.ChannelID,
+			&ticket.Title,
+			&ticket.Status,
+			&ticket.CreatedAt,
+			&ticket.ClosedAt,
+			&ticket.ClosedBy,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, &ticket)
+	}
+	
+	return tickets, nil
+}
+
+func (d *Database) CloseTicket(channelID, closedBy string) error {
+	query := `UPDATE tickets SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = ?
+			  WHERE channel_id = ?`
+	
+	_, err := d.db.Exec(query, closedBy, channelID)
+	return err
+}
+
+func (d *Database) CreateTicketPanel(panel *TicketPanel) error {
+	query := `INSERT INTO ticket_panels (guild_id, channel_id, message_id, title, description)
+			  VALUES (?, ?, ?, ?, ?)`
+	
+	result, err := d.db.Exec(query,
+		panel.GuildID,
+		panel.ChannelID,
+		panel.MessageID,
+		panel.Title,
+		panel.Description,
+	)
+	
+	if err != nil {
+		return err
+	}
+	
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	
+	panel.ID = id
+	return nil
+}
+
+func (d *Database) GetTicketPanelByMessage(messageID string) (*TicketPanel, error) {
+	query := `SELECT id, guild_id, channel_id, message_id, title, description, created_at
+			  FROM ticket_panels WHERE message_id = ?`
+	
+	var panel TicketPanel
+	row := d.db.QueryRow(query, messageID)
+	err := row.Scan(
+		&panel.ID,
+		&panel.GuildID,
+		&panel.ChannelID,
+		&panel.MessageID,
+		&panel.Title,
+		&panel.Description,
+		&panel.CreatedAt,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	
+	return &panel, nil
 }

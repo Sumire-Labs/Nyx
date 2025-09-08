@@ -47,6 +47,8 @@ func (d *Database) runMigrations() error {
 		createUsersTable,
 		createUserGuildsTable,
 		createCommandLogsTable,
+		createTicketsTable,
+		createTicketPanelsTable,
 	}
 	
 	for _, migration := range migrations {
@@ -105,4 +107,28 @@ CREATE TABLE IF NOT EXISTS command_logs (
     success BOOLEAN DEFAULT TRUE,
     error_message TEXT,
     executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);`
+
+const createTicketsTable = `
+CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    channel_id TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    status TEXT DEFAULT 'open',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    closed_at DATETIME,
+    closed_by TEXT
+);`
+
+const createTicketPanelsTable = `
+CREATE TABLE IF NOT EXISTS ticket_panels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );`

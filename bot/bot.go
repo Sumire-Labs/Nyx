@@ -198,6 +198,11 @@ func (b *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionC
 func (b *Bot) handleComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	customID := i.MessageComponentData().CustomID
 	
+	if strings.HasPrefix(customID, "create_ticket") || strings.HasPrefix(customID, "close_ticket") {
+		b.handleTicketInteraction(s, i)
+		return
+	}
+	
 	if strings.HasPrefix(customID, "page_") {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseUpdateMessage,
