@@ -70,6 +70,44 @@ type TicketPanel struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type LogSettings struct {
+	GuildID           string    `json:"guild_id"`
+	LogChannelID      *string   `json:"log_channel_id"`
+	Enabled           bool      `json:"enabled"`
+	LogMemberJoin     bool      `json:"log_member_join"`
+	LogMemberLeave    bool      `json:"log_member_leave"`
+	LogMessageEdit    bool      `json:"log_message_edit"`
+	LogMessageDelete  bool      `json:"log_message_delete"`
+	LogRoleCreate     bool      `json:"log_role_create"`
+	LogRoleUpdate     bool      `json:"log_role_update"`
+	LogRoleDelete     bool      `json:"log_role_delete"`
+	LogNicknameChange bool      `json:"log_nickname_change"`
+	LogBan            bool      `json:"log_ban"`
+	LogUnban          bool      `json:"log_unban"`
+	LogKick           bool      `json:"log_kick"`
+	LogTimeout        bool      `json:"log_timeout"`
+	LogChannelCreate  bool      `json:"log_channel_create"`
+	LogChannelUpdate  bool      `json:"log_channel_update"`
+	LogChannelDelete  bool      `json:"log_channel_delete"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+type ServerLog struct {
+	ID         int64      `json:"id"`
+	GuildID    string     `json:"guild_id"`
+	EventType  string     `json:"event_type"`
+	UserID     *string    `json:"user_id"`
+	TargetID   *string    `json:"target_id"`
+	ChannelID  *string    `json:"channel_id"`
+	RoleID     *string    `json:"role_id"`
+	Reason     *string    `json:"reason"`
+	OldContent *string    `json:"old_content"`
+	NewContent *string    `json:"new_content"`
+	Metadata   *string    `json:"metadata"`
+	Timestamp  time.Time  `json:"timestamp"`
+}
+
 func (d *Database) GetGuild(guildID string) (*Guild, error) {
 	query := `SELECT id, name, prefix, welcome_channel_id, log_channel_id, auto_role_id, created_at, updated_at 
 			  FROM guilds WHERE id = ?`
@@ -429,4 +467,159 @@ func (d *Database) GetTicketPanelByMessage(messageID string) (*TicketPanel, erro
 	}
 	
 	return &panel, nil
+}
+
+func (d *Database) GetLogSettings(guildID string) (*LogSettings, error) {
+	query := `SELECT guild_id, log_channel_id, enabled, log_member_join, log_member_leave,
+			  log_message_edit, log_message_delete, log_role_create, log_role_update, log_role_delete,
+			  log_nickname_change, log_ban, log_unban, log_kick, log_timeout,
+			  log_channel_create, log_channel_update, log_channel_delete, created_at, updated_at
+			  FROM log_settings WHERE guild_id = ?`
+	
+	var settings LogSettings
+	row := d.db.QueryRow(query, guildID)
+	err := row.Scan(
+		&settings.GuildID,
+		&settings.LogChannelID,
+		&settings.Enabled,
+		&settings.LogMemberJoin,
+		&settings.LogMemberLeave,
+		&settings.LogMessageEdit,
+		&settings.LogMessageDelete,
+		&settings.LogRoleCreate,
+		&settings.LogRoleUpdate,
+		&settings.LogRoleDelete,
+		&settings.LogNicknameChange,
+		&settings.LogBan,
+		&settings.LogUnban,
+		&settings.LogKick,
+		&settings.LogTimeout,
+		&settings.LogChannelCreate,
+		&settings.LogChannelUpdate,
+		&settings.LogChannelDelete,
+		&settings.CreatedAt,
+		&settings.UpdatedAt,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	
+	return &settings, nil
+}
+
+func (d *Database) CreateOrUpdateLogSettings(settings *LogSettings) error {
+	query := `INSERT OR REPLACE INTO log_settings 
+			  (guild_id, log_channel_id, enabled, log_member_join, log_member_leave,
+			   log_message_edit, log_message_delete, log_role_create, log_role_update, log_role_delete,
+			   log_nickname_change, log_ban, log_unban, log_kick, log_timeout,
+			   log_channel_create, log_channel_update, log_channel_delete, updated_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+	
+	_, err := d.db.Exec(query,
+		settings.GuildID,
+		settings.LogChannelID,
+		settings.Enabled,
+		settings.LogMemberJoin,
+		settings.LogMemberLeave,
+		settings.LogMessageEdit,
+		settings.LogMessageDelete,
+		settings.LogRoleCreate,
+		settings.LogRoleUpdate,
+		settings.LogRoleDelete,
+		settings.LogNicknameChange,
+		settings.LogBan,
+		settings.LogUnban,
+		settings.LogKick,
+		settings.LogTimeout,
+		settings.LogChannelCreate,
+		settings.LogChannelUpdate,
+		settings.LogChannelDelete,
+	)
+	
+	return err
+}
+
+func (d *Database) LogServerEvent(log *ServerLog) error {
+	query := `INSERT INTO server_logs 
+			  (guild_id, event_type, user_id, target_id, channel_id, role_id, reason, old_content, new_content, metadata)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	
+	result, err := d.db.Exec(query,
+		log.GuildID,
+		log.EventType,
+		log.UserID,
+		log.TargetID,
+		log.ChannelID,
+		log.RoleID,
+		log.Reason,
+		log.OldContent,
+		log.NewContent,
+		log.Metadata,
+	)
+	
+	if err != nil {
+		return err
+	}
+	
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	
+	log.ID = id
+	return nil
+}
+
+func (d *Database) GetRecentServerLogs(guildID, eventType string, limit int) ([]*ServerLog, error) {
+	var query string
+	var args []interface{}
+	
+	if eventType != "" {
+		query = `SELECT id, guild_id, event_type, user_id, target_id, channel_id, role_id, reason, 
+				 old_content, new_content, metadata, timestamp
+				 FROM server_logs WHERE guild_id = ? AND event_type = ?
+				 ORDER BY timestamp DESC LIMIT ?`
+		args = []interface{}{guildID, eventType, limit}
+	} else {
+		query = `SELECT id, guild_id, event_type, user_id, target_id, channel_id, role_id, reason,
+				 old_content, new_content, metadata, timestamp
+				 FROM server_logs WHERE guild_id = ?
+				 ORDER BY timestamp DESC LIMIT ?`
+		args = []interface{}{guildID, limit}
+	}
+	
+	rows, err := d.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var logs []*ServerLog
+	for rows.Next() {
+		var log ServerLog
+		err := rows.Scan(
+			&log.ID,
+			&log.GuildID,
+			&log.EventType,
+			&log.UserID,
+			&log.TargetID,
+			&log.ChannelID,
+			&log.RoleID,
+			&log.Reason,
+			&log.OldContent,
+			&log.NewContent,
+			&log.Metadata,
+			&log.Timestamp,
+		)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, &log)
+	}
+	
+	return logs, nil
 }

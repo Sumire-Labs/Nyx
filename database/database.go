@@ -49,6 +49,8 @@ func (d *Database) runMigrations() error {
 		createCommandLogsTable,
 		createTicketsTable,
 		createTicketPanelsTable,
+		createLogSettingsTable,
+		createServerLogsTable,
 	}
 	
 	for _, migration := range migrations {
@@ -131,4 +133,48 @@ CREATE TABLE IF NOT EXISTS ticket_panels (
     title TEXT NOT NULL,
     description TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);`
+
+const createLogSettingsTable = `
+CREATE TABLE IF NOT EXISTS log_settings (
+    guild_id TEXT PRIMARY KEY,
+    log_channel_id TEXT,
+    enabled BOOLEAN DEFAULT TRUE,
+    log_member_join BOOLEAN DEFAULT TRUE,
+    log_member_leave BOOLEAN DEFAULT TRUE,
+    log_message_edit BOOLEAN DEFAULT TRUE,
+    log_message_delete BOOLEAN DEFAULT TRUE,
+    log_role_create BOOLEAN DEFAULT TRUE,
+    log_role_update BOOLEAN DEFAULT TRUE,
+    log_role_delete BOOLEAN DEFAULT TRUE,
+    log_nickname_change BOOLEAN DEFAULT TRUE,
+    log_ban BOOLEAN DEFAULT TRUE,
+    log_unban BOOLEAN DEFAULT TRUE,
+    log_kick BOOLEAN DEFAULT TRUE,
+    log_timeout BOOLEAN DEFAULT TRUE,
+    log_channel_create BOOLEAN DEFAULT TRUE,
+    log_channel_update BOOLEAN DEFAULT TRUE,
+    log_channel_delete BOOLEAN DEFAULT TRUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);`
+
+const createServerLogsTable = `
+CREATE TABLE IF NOT EXISTS server_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    user_id TEXT,
+    target_id TEXT,
+    channel_id TEXT,
+    role_id TEXT,
+    reason TEXT,
+    old_content TEXT,
+    new_content TEXT,
+    metadata TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX(guild_id),
+    INDEX(event_type),
+    INDEX(user_id),
+    INDEX(timestamp)
 );`

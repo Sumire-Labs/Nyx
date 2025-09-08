@@ -11,12 +11,14 @@ import (
 )
 
 type Bot struct {
-	session        *discordgo.Session
-	config         Config
-	db             *database.Database
-	commands       *commands.Registry
-	logger         *logger.Logger
-	ready          bool
+	session      *discordgo.Session
+	config       Config
+	db           *database.Database
+	commands     *commands.Registry
+	logger       *logger.Logger
+	ready        bool
+	messageCache map[string]string                      // メッセージID -> 内容
+	memberCache  map[string]*discordgo.Member           // guildID:userID -> Member
 }
 
 type Config struct {
@@ -40,17 +42,34 @@ func New(config Config) (*Bot, error) {
 	}
 	
 	bot := &Bot{
-		session:  session,
-		config:   config,
-		db:       config.Database,
-		commands: config.Commands,
-		logger:   config.Logger,
-		ready:    false,
+		session:      session,
+		config:       config,
+		db:           config.Database,
+		commands:     config.Commands,
+		logger:       config.Logger,
+		ready:        false,
+		messageCache: make(map[string]string),
+		memberCache:  make(map[string]*discordgo.Member),
 	}
 	
 	session.AddHandler(bot.onReady)
 	session.AddHandler(bot.onMessageCreate)
 	session.AddHandler(bot.onInteractionCreate)
+	
+	// ログ用イベントハンドラー
+	session.AddHandler(bot.handleGuildMemberAdd)
+	session.AddHandler(bot.handleGuildMemberRemove)
+	session.AddHandler(bot.handleGuildMemberUpdate)
+	session.AddHandler(bot.handleMessageUpdate)
+	session.AddHandler(bot.handleMessageDelete)
+	session.AddHandler(bot.handleGuildBanAdd)
+	session.AddHandler(bot.handleGuildBanRemove)
+	session.AddHandler(bot.handleGuildRoleCreate)
+	session.AddHandler(bot.handleGuildRoleUpdate)
+	session.AddHandler(bot.handleGuildRoleDelete)
+	session.AddHandler(bot.handleChannelCreate)
+	session.AddHandler(bot.handleChannelUpdate)
+	session.AddHandler(bot.handleChannelDelete)
 	
 	session.Identify.Intents = discordgo.IntentsAll
 	
@@ -96,6 +115,16 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID || m.Author.Bot {
 		return
+	}
+	
+	// メッセージキャッシュに保存（ログ用）
+	if m.GuildID != "" {
+		b.messageCache[m.ID] = m.Content
+		
+		// メンバーキャッシュに保存
+		if m.Member != nil {
+			b.memberCache[m.GuildID+":"+m.Author.ID] = m.Member
+		}
 	}
 	
 	if !strings.HasPrefix(m.Content, b.config.Prefix) {
