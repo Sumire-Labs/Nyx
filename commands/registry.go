@@ -92,8 +92,12 @@ func (r *Registry) GetByCategory(category string) []*Command {
 	return commands
 }
 
+var DefaultCommands []*Command
+
 func (r *Registry) RegisterDefaultCommands() {
-	// コマンドをここに追加していきます
+	for _, cmd := range DefaultCommands {
+		r.Register(cmd)
+	}
 }
 
 func (c *Context) Reply(content string) error {
