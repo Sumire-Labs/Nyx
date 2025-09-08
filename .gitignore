@@ -27,6 +27,39 @@ go.work.sum
 # env file
 .env
 
+# Config files with secrets
+config.yaml
+config.yml
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+db/
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Output of the go build
+nyx
+nyx.exe
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
 # Editor/IDE
 .idea/
 .vscode/
+*.swp
+*.swo
