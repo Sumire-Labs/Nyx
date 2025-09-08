@@ -82,7 +82,8 @@ func executePingSlash(ctx *SlashContext) error {
 		SetTimestamp(time.Now()).
 		Build()
 
-	return ctx.Session.InteractionResponseEdit(ctx.Interaction, &discordgo.WebhookEdit{
+	_, err = ctx.Session.InteractionResponseEdit(ctx.Interaction, &discordgo.WebhookEdit{
 		Embeds: &[]*discordgo.MessageEmbed{embed},
 	})
+	return err
 }
