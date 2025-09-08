@@ -2,7 +2,6 @@ package bot
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	nyxcomponents "github.com/Sumire-Labs/Nyx-API/components"
@@ -51,10 +50,10 @@ func (b *Bot) handleCreateTicket(s *discordgo.Session, i *discordgo.InteractionC
 
 	channelName := fmt.Sprintf("ticket-%s", userID)
 	
-	channel, err := s.GuildChannelCreate(guildID, &discordgo.GuildChannelCreateData{
-		Name:     channelName,
-		Type:     discordgo.ChannelTypeGuildText,
-		Topic:    fmt.Sprintf("%s のサポートチケット", i.Member.User.Username),
+	channel, err := s.GuildChannelCreateComplex(guildID, discordgo.GuildChannelCreateData{
+		Name:  channelName,
+		Type:  discordgo.ChannelTypeGuildText,
+		Topic: fmt.Sprintf("%s のサポートチケット", i.Member.User.Username),
 		PermissionOverwrites: []*discordgo.PermissionOverwrite{
 			{
 				ID:   guildID,
@@ -77,7 +76,7 @@ func (b *Bot) handleCreateTicket(s *discordgo.Session, i *discordgo.InteractionC
 
 	for _, role := range guild.Roles {
 		if role.Permissions&discordgo.PermissionManageChannels != 0 || role.Permissions&discordgo.PermissionAdministrator != 0 {
-			_, err = s.ChannelPermissionSet(channel.ID, role.ID, discordgo.PermissionOverwriteTypeRole, 
+			err = s.ChannelPermissionSet(channel.ID, role.ID, discordgo.PermissionOverwriteTypeRole, 
 				discordgo.PermissionViewChannel|discordgo.PermissionSendMessages|discordgo.PermissionReadMessageHistory, 0)
 			if err != nil {
 				b.logger.Warn("Failed to set admin role permissions for ticket: %v", err)
