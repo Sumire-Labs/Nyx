@@ -51,7 +51,7 @@ func executeAvatar(ctx *Context) error {
 		targetUser = ctx.Message.Author
 	}
 
-	return sendAvatarEmbed(ctx.Session, ctx.Message.ChannelID, targetUser, false)
+	return sendAvatarEmbed(ctx.Session, ctx.Message.ChannelID, targetUser)
 }
 
 func executeAvatarSlash(ctx *SlashContext) error {
@@ -68,7 +68,7 @@ func executeAvatarSlash(ctx *SlashContext) error {
 	return ctx.ReplyEmbed(embed, false)
 }
 
-func sendAvatarEmbed(session *discordgo.Session, channelID string, user *discordgo.User, isSlash bool) error {
+func sendAvatarEmbed(session *discordgo.Session, channelID string, user *discordgo.User) error {
 	embed := createAvatarEmbed(user)
 	_, err := session.ChannelMessageSendEmbed(channelID, embed)
 	return err
