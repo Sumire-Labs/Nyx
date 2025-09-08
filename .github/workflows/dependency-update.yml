@@ -1,0 +1,73 @@
+name: Weekly Dependency Update
+
+on:
+  schedule:
+    # 毎週月曜日の午前6時 (UTC) = 日本時間15時
+    - cron: '0 6 * * 1'
+  workflow_dispatch: # 手動実行も可能
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.1'
+
+      - name: Update Go dependencies
+        run: |
+          # go.modの依存関係を最新に更新
+          go get -u ./...
+          go mod tidy
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet go.mod go.sum; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(deps): update Go dependencies'
+          title: 'chore(deps): weekly dependency update'
+          body: |
+            ## 📦 Weekly Dependency Update
+            
+            This PR updates Go dependencies to their latest versions.
+            
+            ### Changes
+            - Updated `go.mod` and `go.sum`
+            - All dependencies bumped to latest versions
+            
+            ### How to test
+            1. Review the changes in `go.mod`
+            2. Run `go mod download` to verify dependencies
+            3. Test the application locally
+            4. Merge if everything looks good
+            
+            ---
+            🤖 This PR was automatically created by GitHub Actions
+            📅 Created: ${{ github.run_id }}
+          branch: dependency-update-${{ github.run_number }}
+          delete-branch: true
+          labels: |
+            dependencies
+            automated-pr
+
+      - name: Summary
+        run: |
+          if [[ "${{ steps.changes.outputs.changed }}" == "true" ]]; then
+            echo "✅ Dependencies updated - PR created"
+          else
+            echo "ℹ️ No dependency updates available"
+          fi
