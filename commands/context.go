@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"fmt"
+	
 	nyxembed "github.com/Sumire-Labs/Nyx-API/embed"
 	"github.com/Sumire-Labs/Nyx-API/logger"
 	"github.com/Sumire-Labs/Nyx/database"
@@ -56,16 +58,35 @@ func (c *DIContext) GetArgs() []string {
 	return c.Args
 }
 
+// 🔧 FIXED: エラーハンドリング追加（サービス取得失敗対応）
 func (c *DIContext) GetBotConfig() services.BotConfigInfo {
-	return c.Services.BotConfig()
+	config, err := c.Services.BotConfig()
+	if err != nil {
+		// フォールバック: ログ出力後にnilを返す（呼び出し元で対応）
+		fmt.Printf("ERROR: Failed to get BotConfig service: %v\n", err)
+		return nil
+	}
+	return config
 }
 
 func (c *DIContext) GetLogger() services.LoggingService {
-	return c.Services.Logger()
+	logger, err := c.Services.Logger()
+	if err != nil {
+		// フォールバック: 標準出力でエラーを出力
+		fmt.Printf("ERROR: Failed to get Logger service: %v\n", err)
+		return nil
+	}
+	return logger
 }
 
 func (c *DIContext) GetDatabase() services.DatabaseService {
-	return c.Services.Database()
+	db, err := c.Services.Database()
+	if err != nil {
+		// フォールバック: ログ出力後にnilを返す
+		fmt.Printf("ERROR: Failed to get Database service: %v\n", err)
+		return nil
+	}
+	return db
 }
 
 func (c *DIContext) Reply(content string) error {
@@ -98,16 +119,32 @@ func (sc *DISlashContext) GetInteraction() *discordgo.Interaction {
 	return sc.Interaction
 }
 
+// 🔧 FIXED: エラーハンドリング追加（SlashContext版）
 func (sc *DISlashContext) GetBotConfig() services.BotConfigInfo {
-	return sc.Services.BotConfig()
+	config, err := sc.Services.BotConfig()
+	if err != nil {
+		fmt.Printf("ERROR: Failed to get BotConfig service: %v\n", err)
+		return nil
+	}
+	return config
 }
 
 func (sc *DISlashContext) GetLogger() services.LoggingService {
-	return sc.Services.Logger()
+	logger, err := sc.Services.Logger()
+	if err != nil {
+		fmt.Printf("ERROR: Failed to get Logger service: %v\n", err)
+		return nil
+	}
+	return logger
 }
 
 func (sc *DISlashContext) GetDatabase() services.DatabaseService {
-	return sc.Services.Database()
+	db, err := sc.Services.Database()
+	if err != nil {
+		fmt.Printf("ERROR: Failed to get Database service: %v\n", err)
+		return nil
+	}
+	return db
 }
 
 func (sc *DISlashContext) Reply(content string, ephemeral bool) error {
@@ -163,16 +200,28 @@ func (sc *DISlashContext) GetOptionValue(name string) *discordgo.ApplicationComm
 
 // DB 旧Context互換のため、具体的なDatabase型を返す
 func (c *DIContext) DB() *database.Database {
-	if db, ok := c.Services.Database().(*database.Database); ok {
-		return db
+	// 🔧 FIXED: エラーハンドリング追加
+	db, err := c.Services.Database()
+	if err != nil {
+		fmt.Printf("ERROR: Failed to get Database service in DB(): %v\n", err)
+		return nil
+	}
+	if dbImpl, ok := db.(*database.Database); ok {
+		return dbImpl
 	}
 	return nil
 }
 
 // Logger 旧Context互換のため、具体的なLogger型を返す
 func (c *DIContext) Logger() *logger.Logger {
-	if log, ok := c.Services.Logger().(*logger.Logger); ok {
-		return log
+	// 🔧 FIXED: エラーハンドリング追加
+	log, err := c.Services.Logger()
+	if err != nil {
+		fmt.Printf("ERROR: Failed to get Logger service in Logger(): %v\n", err)
+		return nil
+	}
+	if logImpl, ok := log.(*logger.Logger); ok {
+		return logImpl
 	}
 	return nil
 }
@@ -186,16 +235,28 @@ func (c *DIContext) Bot() BotInterface {
 
 // DB 旧SlashContext互換のため、具体的なDatabase型を返す
 func (sc *DISlashContext) DB() *database.Database {
-	if db, ok := sc.Services.Database().(*database.Database); ok {
-		return db
+	// 🔧 FIXED: エラーハンドリング追加
+	db, err := sc.Services.Database()
+	if err != nil {
+		fmt.Printf("ERROR: Failed to get Database service in SlashContext DB(): %v\n", err)
+		return nil
+	}
+	if dbImpl, ok := db.(*database.Database); ok {
+		return dbImpl
 	}
 	return nil
 }
 
 // Logger 旧SlashContext互換のため、具体的なLogger型を返す
 func (sc *DISlashContext) Logger() *logger.Logger {
-	if log, ok := sc.Services.Logger().(*logger.Logger); ok {
-		return log
+	// 🔧 FIXED: エラーハンドリング追加
+	log, err := sc.Services.Logger()
+	if err != nil {
+		fmt.Printf("ERROR: Failed to get Logger service in SlashContext Logger(): %v\n", err)
+		return nil
+	}
+	if logImpl, ok := log.(*logger.Logger); ok {
+		return logImpl
 	}
 	return nil
 }

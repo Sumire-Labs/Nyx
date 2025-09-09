@@ -119,9 +119,10 @@ type SlashContext interface {
 }
 
 // ServiceLocator サービスへのアクセスを提供
+// 🔧 FIXED: エラーを返すように変更（パニック除去）
 type ServiceLocator interface {
-	Database() DatabaseService
-	Logger() LoggingService
-	Commands() CommandService
-	BotConfig() BotConfigInfo  // 循環依存回避のため BotConfigInfo を使用
+	Database() (DatabaseService, error)
+	Logger() (LoggingService, error)
+	Commands() (CommandService, error)
+	BotConfig() (BotConfigInfo, error)
 }

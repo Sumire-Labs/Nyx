@@ -13,6 +13,7 @@ import (
 	"github.com/Sumire-Labs/Nyx/commands"
 	"github.com/Sumire-Labs/Nyx/database"
 	"github.com/Sumire-Labs/Nyx/di"
+	nyxutils "github.com/Sumire-Labs/Nyx/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -113,15 +114,27 @@ func main() {
 	// 🎯 ServiceLocatorを作成
 	serviceLocator := di.NewServiceLocator(container)
 
-	// 📋 サービスを取得
-	log = serviceLocator.Logger().(*logger.Logger)
+	// 🔧 FIXED: エラーハンドリング追加（パニック対策）
+	loggerService, err := serviceLocator.Logger()
+	if err != nil {
+		fmt.Printf("❌ Failed to get logger service: %v\n", err)
+		os.Exit(1)
+	}
+	log = loggerService.(*logger.Logger)
 	log.Info("🚀 Starting Nyx Bot with Dependency Injection...")
 
-	db := serviceLocator.Database().(*database.Database)
+	dbService, err := serviceLocator.Database()
+	if err != nil {
+		log.Fatal("❌ Failed to get database service: %v", err)
+	}
+	db := dbService.(*database.Database)
 	defer db.Close()
 	log.Info("✅ Database initialized")
 
-	commandService := serviceLocator.Commands()
+	commandService, err := serviceLocator.Commands()
+	if err != nil {
+		log.Fatal("❌ Failed to get command service: %v", err)
+	}
 	log.Info("📋 Registered %d commands", commandService.Count())
 
 	// 実際の Registry を取得（Bot設定用）
@@ -187,15 +200,69 @@ func loadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
+	// 🔧 FIXED: Botトークンのセキュリティ検証を追加
 	if config.Bot.Token == "" {
 		return nil, fmt.Errorf("bot token is required")
+	}
+	
+	if err := validateBotToken(config.Bot.Token); err != nil {
+		return nil, fmt.Errorf("invalid bot token: %w", err)
+	}
+
+	// 🔧 FIXED: Owner ID検証を追加
+	for i, ownerID := range config.OwnerIDs {
+		if ownerID == "" {
+			continue // 空のIDはスキップ
+		}
+		if !nyxutils.ValidateDiscordID(ownerID) {
+			return nil, fmt.Errorf("invalid owner ID at position %d: %s", i, ownerID)
+		}
 	}
 
 	if config.Bot.Prefix == "" {
 		config.Bot.Prefix = "!"
 	}
 
+	// 🔧 FIXED: プレフィックス検証を追加
+	config.Bot.Prefix = nyxutils.SanitizeInput(config.Bot.Prefix)
+	if len(config.Bot.Prefix) > 10 {
+		return nil, fmt.Errorf("bot prefix too long (max 10 characters)")
+	}
+
 	return &config, nil
+}
+
+// 🔧 FIXED: Botトークン検証関数を追加
+func validateBotToken(token string) error {
+	// Discordボットトークンの基本形式を検証
+	// MTxxxxxxxxxxxxxxxxxxxxxx.xxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxx の形式
+	
+	if len(token) < 50 {
+		return fmt.Errorf("token too short (minimum 50 characters)")
+	}
+	
+	if len(token) > 100 {
+		return fmt.Errorf("token too long (maximum 100 characters)")
+	}
+	
+	// トークンにスペースや改行が含まれていないかチェック
+	sanitized := nyxutils.SanitizeInput(token)
+	if sanitized != token {
+		return fmt.Errorf("token contains invalid characters")
+	}
+	
+	// 悪意のあるコンテンツパターンをチェック
+	if nyxutils.ContainsMaliciousContent(token) {
+		return fmt.Errorf("token contains potentially malicious content")
+	}
+	
+	// Discordボットトークンの基本パターンを検証 (最低限の形式チェック)
+	// 注意: 実際のトークン形式は変更される可能性があるため、基本的なチェックのみ
+	if token == "your_bot_token_here" || token == "BOT_TOKEN" || token == "token" {
+		return fmt.Errorf("placeholder token detected, please use actual bot token")
+	}
+	
+	return nil
 }
 
 func parseLogLevel(level string) logger.LogLevel {

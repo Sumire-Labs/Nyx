@@ -108,38 +108,60 @@ func NewServiceLocator(container *Container) services.ServiceLocator {
 	return &ServiceLocatorImpl{container: container}
 }
 
-func (sl *ServiceLocatorImpl) Database() services.DatabaseService {
+// 🔧 FIXED: パニック除去、エラーを返す
+func (sl *ServiceLocatorImpl) Database() (services.DatabaseService, error) {
 	service, err := sl.container.Get("Database")
 	if err != nil {
-		panic(fmt.Sprintf("failed to get database service: %v", err))
+		return nil, fmt.Errorf("failed to get database service: %w", err)
 	}
-	return service.(services.DatabaseService)
+	
+	db, ok := service.(services.DatabaseService)
+	if !ok {
+		return nil, fmt.Errorf("database service has incorrect type")
+	}
+	return db, nil
 }
 
-func (sl *ServiceLocatorImpl) Logger() services.LoggingService {
+// 🔧 FIXED: パニック除去、エラーを返す
+func (sl *ServiceLocatorImpl) Logger() (services.LoggingService, error) {
 	service, err := sl.container.Get("Logger")
 	if err != nil {
-		panic(fmt.Sprintf("failed to get logger service: %v", err))
+		return nil, fmt.Errorf("failed to get logger service: %w", err)
 	}
-	return service.(services.LoggingService)
+	
+	logger, ok := service.(services.LoggingService)
+	if !ok {
+		return nil, fmt.Errorf("logger service has incorrect type")
+	}
+	return logger, nil
 }
 
-func (sl *ServiceLocatorImpl) Commands() services.CommandService {
+// 🔧 FIXED: パニック除去、エラーを返す
+func (sl *ServiceLocatorImpl) Commands() (services.CommandService, error) {
 	service, err := sl.container.Get("Commands")
 	if err != nil {
-		panic(fmt.Sprintf("failed to get commands service: %v", err))
+		return nil, fmt.Errorf("failed to get commands service: %w", err)
 	}
-	// *commands.Registry を services.CommandService として返す
-	registry := service.(*commands.Registry)
-	return &CommandServiceAdapter{registry: registry}
+	
+	registry, ok := service.(*commands.Registry)
+	if !ok {
+		return nil, fmt.Errorf("commands service has incorrect type")
+	}
+	return &CommandServiceAdapter{registry: registry}, nil
 }
 
-func (sl *ServiceLocatorImpl) BotConfig() services.BotConfigInfo {
+// 🔧 FIXED: パニック除去、エラーを返す
+func (sl *ServiceLocatorImpl) BotConfig() (services.BotConfigInfo, error) {
 	service, err := sl.container.Get("BotConfig")
 	if err != nil {
-		panic(fmt.Sprintf("failed to get bot config service: %v", err))
+		return nil, fmt.Errorf("failed to get bot config service: %w", err)
 	}
-	return service.(services.BotConfigInfo)
+	
+	config, ok := service.(services.BotConfigInfo)
+	if !ok {
+		return nil, fmt.Errorf("bot config service has incorrect type")
+	}
+	return config, nil
 }
 
 // RegisterServices DIコンテナにすべてのサービスを登録
