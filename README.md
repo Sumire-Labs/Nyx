@@ -1,4 +1,4 @@
-# Nyx 1.1.0
+# Nyx 1.1.1
 
 **Go言語で構築されたALL-IN-ONE DISCORDBOT**
 
