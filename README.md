@@ -1,4 +1,4 @@
-# Nyx 1.1.1
+# Nyx Discord BOT 1.1.2
 
 **Go言語で構築されたALL-IN-ONE DISCORDBOT**
 

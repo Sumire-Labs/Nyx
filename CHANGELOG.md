@@ -5,6 +5,14 @@ All notable changes to Nyx Discord Bot will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2025-01-13
+
+SQlite3を1.4.12から1.4.17に変更
+
+## [1.1.1] - 2025-01-13
+
+go言語を1.25.1へアップデートしました。
+
 ## [1.1.0] - 2025-01-13
 
 このリリースでは、Nyx-API v0.3.1への完全対応と、依存性注入（DI）パターンの完全実装により、Botのアーキテクチャを大幅に改善しました。パフォーマンス、安定性、保守性が飛躍的に向上しています。
