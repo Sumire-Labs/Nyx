@@ -1,8 +1,6 @@
 module github.com/Sumire-Labs/Nyx
 
-go 1.24.1
-
-toolchain go1.24.4
+go 1.25.1
 
 require (
 	github.com/Sumire-Labs/Nyx-API v0.3.1
