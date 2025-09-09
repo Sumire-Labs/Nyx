@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Sumire-Labs/Nyx-API/logger"
 	"github.com/Sumire-Labs/Nyx-API/utils"
@@ -14,6 +15,7 @@ import (
 	"github.com/Sumire-Labs/Nyx/database"
 	"github.com/Sumire-Labs/Nyx/di"
 	nyxutils "github.com/Sumire-Labs/Nyx/utils"
+	"github.com/bwmarrin/discordgo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -141,7 +143,58 @@ func main() {
 	commandRegistry, _ := container.Get("Commands")
 	registry := commandRegistry.(*commands.Registry)
 
-	// 🤖 Botインスタンスを作成（完全DI対応）
+	// Discordセッションを作成
+	session, err := discordgo.New("Bot " + config.Bot.Token)
+	if err != nil {
+		log.Fatal("❌ Failed to create Discord session: %v", err)
+	}
+
+	// BotContext設定
+	botConfig := &utils.BotConfig{
+		CacheConfig: utils.CacheConfig{
+			EnableCache:   true,
+			UserCacheTTL:  30 * time.Minute,
+			GuildCacheTTL: 1 * time.Hour,
+			MaxCacheSize:  5000,
+		},
+		RateLimitConfig: utils.RateLimitConfig{
+			EnableRateLimit: true,
+			CustomLimits: map[string]utils.RateLimit{
+				"global": {
+					Requests: 50,
+					Window:   time.Minute,
+					Burst:    10,
+				},
+			},
+		},
+		SecurityConfig: utils.SecurityConfig{
+			EnableSecurity:     true,
+			AllowedHosts:      []string{"discord.com", "discordapp.com"},
+			MaxRequestSize:    1024 * 1024, // 1MB
+			EnableRateLimiting: true,
+		},
+		LogLevel:            config.Logging.Level,
+		APITimeout:          10 * time.Second,
+		MaxRetries:          3,
+		RetryBaseDelay:      1 * time.Second,
+		HealthCheckInterval: 30 * time.Second,
+	}
+
+	// BotContext作成（自動リソース管理）
+	botContext, err := utils.NewBotContext(session, botConfig)
+	if err != nil {
+		log.Fatal("❌ Failed to create BotContext: %v", err)
+	}
+	defer func() {
+		log.Info("🧹 Cleaning up BotContext resources...")
+		if err := botContext.Close(); err != nil {
+			log.Error("❌ Error during BotContext cleanup: %v", err)
+		} else {
+			log.Info("✅ BotContext resources cleaned up successfully")
+		}
+	}()
+
+	// 🤖 Botインスタンスを作成（BotContext統合）
 	botInstance, err := bot.New(bot.Config{
 		Token:          config.Bot.Token,
 		Prefix:         config.Bot.Prefix,
@@ -155,6 +208,7 @@ func main() {
 		SlashCommands:  config.Features.SlashCommands,
 		LoggingChannel: config.Features.LoggingChannel,
 		OwnerIDs:       config.OwnerIDs,
+		BotContext:     botContext, // 🚀 NEW: BotContext統合
 	})
 
 	if err != nil {
@@ -165,15 +219,7 @@ func main() {
 		log.Fatal("❌ Failed to start bot: %v", err)
 	}
 
-	log.Info("✅ Nyx Bot is now running with DI! Press CTRL+C to exit.")
-
-	// Nyx-API 0.3.1で実装された実験的なグローバルリソースクリーンアップを実装。
-	defer func() {
-		log.Info("🧹 Cleaning up global resources...")
-		utils.CleanupGlobalRateLimiter()
-		utils.CleanupGlobalDiscordCache()
-		log.Info("✨ Global resources cleaned up")
-	}()
+	log.Info("✅ Nyx Bot is now running with BotContext! Press CTRL+C to exit.")
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
@@ -204,7 +250,7 @@ func loadConfig(path string) (*Config, error) {
 	if config.Bot.Token == "" {
 		return nil, fmt.Errorf("bot token is required")
 	}
-	
+
 	if err := validateBotToken(config.Bot.Token); err != nil {
 		return nil, fmt.Errorf("invalid bot token: %w", err)
 	}
@@ -236,32 +282,32 @@ func loadConfig(path string) (*Config, error) {
 func validateBotToken(token string) error {
 	// Discordボットトークンの基本形式を検証
 	// MTxxxxxxxxxxxxxxxxxxxxxx.xxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxx の形式
-	
+
 	if len(token) < 50 {
 		return fmt.Errorf("token too short (minimum 50 characters)")
 	}
-	
+
 	if len(token) > 100 {
 		return fmt.Errorf("token too long (maximum 100 characters)")
 	}
-	
+
 	// トークンにスペースや改行が含まれていないかチェック
 	sanitized := nyxutils.SanitizeInput(token)
 	if sanitized != token {
 		return fmt.Errorf("token contains invalid characters")
 	}
-	
+
 	// 悪意のあるコンテンツパターンをチェック
 	if nyxutils.ContainsMaliciousContent(token) {
 		return fmt.Errorf("token contains potentially malicious content")
 	}
-	
+
 	// Discordボットトークンの基本パターンを検証 (最低限の形式チェック)
 	// 注意: 実際のトークン形式は変更される可能性があるため、基本的なチェックのみ
 	if token == "your_bot_token_here" || token == "BOT_TOKEN" || token == "token" {
 		return fmt.Errorf("placeholder token detected, please use actual bot token")
 	}
-	
+
 	return nil
 }
 

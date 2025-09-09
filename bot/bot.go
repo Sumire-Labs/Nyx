@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Sumire-Labs/Nyx-API/logger"
+	nyxutils "github.com/Sumire-Labs/Nyx-API/utils"
 	"github.com/Sumire-Labs/Nyx/commands"
 	"github.com/Sumire-Labs/Nyx/database"
 	"github.com/Sumire-Labs/Nyx/services"
@@ -17,6 +18,7 @@ type Bot struct {
 	session      *discordgo.Session
 	config       Config
 	services     services.ServiceLocator  // DI サービスロケーター
+	botContext   *nyxutils.BotContext     // 🚀 NEW: Nyx-API BotContext統合
 	ready        bool
 	
 	// 🔧 FIXED: 無制限キャッシュ → LRUキャッシュ（メモリリーク修正）
@@ -40,15 +42,27 @@ type Config struct {
 	Commands       *commands.Registry
 	Logger         *logger.Logger
 	Services       services.ServiceLocator  // DI サービスロケーター
+	BotContext     *nyxutils.BotContext     // 🚀 NEW: Nyx-API BotContext統合
 	SlashCommands  bool
 	LoggingChannel string
 	OwnerIDs       []string
 }
 
 func New(config Config) (*Bot, error) {
-	session, err := discordgo.New("Bot " + config.Token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Discord session: %w", err)
+	// 🚀 FIXED: BotContextのセッションを使用（重複セッション作成を避ける）
+	var session *discordgo.Session
+	if config.BotContext != nil {
+		session = config.BotContext.Session()
+		if session == nil {
+			return nil, fmt.Errorf("BotContext has no valid session")
+		}
+	} else {
+		// フォールバック: 従来通りのセッション作成
+		var err error
+		session, err = discordgo.New("Bot " + config.Token)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Discord session: %w", err)
+		}
 	}
 	
 	// 🔧 FIXED: LRUキャッシュでメモリ制限 (メッセージ: 1000件, 30分TTL)
@@ -63,6 +77,7 @@ func New(config Config) (*Bot, error) {
 		session:      session,
 		config:       config,
 		services:     config.Services,
+		botContext:   config.BotContext, // 🚀 NEW: BotContext統合
 		ready:        false,
 		messageCache: messageCache,
 		memberCache:  memberCache,
