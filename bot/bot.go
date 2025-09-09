@@ -3,11 +3,13 @@ package bot
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Sumire-Labs/Nyx-API/logger"
 	"github.com/Sumire-Labs/Nyx/commands"
 	"github.com/Sumire-Labs/Nyx/database"
 	"github.com/Sumire-Labs/Nyx/services"
+	"github.com/Sumire-Labs/Nyx/utils"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -16,8 +18,11 @@ type Bot struct {
 	config       Config
 	services     services.ServiceLocator  // DI サービスロケーター
 	ready        bool
-	messageCache map[string]string                      // メッセージID -> 内容
-	memberCache  map[string]*discordgo.Member           // guildID:userID -> Member
+	
+	// 🔧 FIXED: 無制限キャッシュ → LRUキャッシュ（メモリリーク修正）
+	messageCache *utils.LRUCache  // メッセージID -> 内容
+	memberCache  *utils.LRUCache  // guildID:userID -> Member
+	cleanupStop  []chan<- bool    // クリーンアップ停止チャンネル
 	
 	// 後方互換性のためのキャッシュフィールド
 	db           *database.Database
@@ -46,13 +51,22 @@ func New(config Config) (*Bot, error) {
 		return nil, fmt.Errorf("failed to create Discord session: %w", err)
 	}
 	
+	// 🔧 FIXED: LRUキャッシュでメモリ制限 (メッセージ: 1000件, 30分TTL)
+	messageCache := utils.NewLRUCache(1000, 30*time.Minute)
+	messageCacheStop := messageCache.StartCleanupRoutine(5 * time.Minute)
+	
+	// 🔧 FIXED: LRUキャッシュでメモリ制限 (メンバー: 500件, 1時間TTL)
+	memberCache := utils.NewLRUCache(500, 1*time.Hour)
+	memberCacheStop := memberCache.StartCleanupRoutine(10 * time.Minute)
+
 	bot := &Bot{
 		session:      session,
 		config:       config,
 		services:     config.Services,
 		ready:        false,
-		messageCache: make(map[string]string),
-		memberCache:  make(map[string]*discordgo.Member),
+		messageCache: messageCache,
+		memberCache:  memberCache,
+		cleanupStop:  []chan<- bool{messageCacheStop, memberCacheStop},
 		// 後方互換性キャッシュ
 		db:           config.Database,
 		commands:     config.Commands,
@@ -91,6 +105,16 @@ func (b *Bot) Start() error {
 }
 
 func (b *Bot) Stop() error {
+	// 🔧 FIXED: キャッシュクリーンアップ停止（リソース適切解放）
+	b.getLogger().Info("Stopping cache cleanup routines...")
+	for _, stop := range b.cleanupStop {
+		select {
+		case stop <- true:
+		default: // ノンブロッキング
+		}
+		close(stop)
+	}
+	
 	if b.config.SlashCommands {
 		b.getLogger().Info("Removing slash commands...")
 		if err := b.removeSlashCommands(); err != nil {
@@ -124,13 +148,13 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		return
 	}
 	
-	// メッセージキャッシュに保存（ログ用）
+	// 🔧 FIXED: LRUキャッシュ使用（ログ用）
 	if m.GuildID != "" {
-		b.messageCache[m.ID] = m.Content
+		b.messageCache.Set(m.ID, m.Content)
 		
 		// メンバーキャッシュに保存
 		if m.Member != nil {
-			b.memberCache[m.GuildID+":"+m.Author.ID] = m.Member
+			b.memberCache.Set(m.GuildID+":"+m.Author.ID, m.Member)
 		}
 	}
 	
@@ -419,7 +443,13 @@ func (b *Bot) IsReady() bool {
 
 func (b *Bot) getDatabase() *database.Database {
 	if b.services != nil {
-		return b.services.Database().(*database.Database)
+		// 🔧 FIXED: エラーハンドリング追加
+		db, err := b.services.Database()
+		if err != nil {
+			b.logger.Error("Failed to get database service: %v", err)
+			return b.db // フォールバック
+		}
+		return db.(*database.Database)
 	}
 	return b.db // 後方互換性
 }
@@ -440,7 +470,18 @@ func (b *Bot) getCommands() *commands.Registry {
 
 func (b *Bot) getLogger() *logger.Logger {
 	if b.services != nil {
-		return b.services.Logger().(*logger.Logger)
+		// 🔧 FIXED: エラーハンドリング追加
+		log, err := b.services.Logger()
+		if err != nil {
+			// フォールバックとして既存のloggerを使用
+			if b.logger != nil {
+				b.logger.Error("Failed to get logger service: %v", err)
+				return b.logger
+			}
+			// 最終フォールバック: 新しいloggerを作成
+			return logger.New("Nyx-Fallback", logger.InfoLevel)
+		}
+		return log.(*logger.Logger)
 	}
 	return b.logger // 後方互換性
 }

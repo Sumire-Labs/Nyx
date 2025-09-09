@@ -96,7 +96,12 @@ func (b *Bot) handleMessageUpdate(s *discordgo.Session, m *discordgo.MessageUpda
 		return
 	}
 
-	oldMessage, exists := b.messageCache[m.ID]
+	// 🔧 FIXED: LRUキャッシュ使用
+	oldMessageInterface, exists := b.messageCache.Get(m.ID)
+	var oldMessage string
+	if exists {
+		oldMessage = oldMessageInterface.(string)
+	}
 	if !exists {
 		return
 	}
@@ -143,7 +148,8 @@ func (b *Bot) handleMessageUpdate(s *discordgo.Session, m *discordgo.MessageUpda
 	}
 	b.db.LogServerEvent(serverLog)
 
-	b.messageCache[m.ID] = m.Content
+	// 🔧 FIXED: LRUキャッシュ使用
+	b.messageCache.Set(m.ID, m.Content)
 }
 
 func (b *Bot) handleMessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
@@ -152,7 +158,12 @@ func (b *Bot) handleMessageDelete(s *discordgo.Session, m *discordgo.MessageDele
 		return
 	}
 
-	content, exists := b.messageCache[m.ID]
+	// 🔧 FIXED: LRUキャッシュ使用
+	contentInterface, exists := b.messageCache.Get(m.ID)
+	var content string
+	if exists {
+		content = contentInterface.(string)
+	}
 	if !exists {
 		content = "*メッセージの内容を取得できませんでした*"
 	}
@@ -192,7 +203,8 @@ func (b *Bot) handleMessageDelete(s *discordgo.Session, m *discordgo.MessageDele
 	}
 	b.db.LogServerEvent(serverLog)
 
-	delete(b.messageCache, m.ID)
+	// 🔧 FIXED: LRUキャッシュ使用（削除はTTLで自動処理）
+	b.messageCache.Delete(m.ID)
 }
 
 func (b *Bot) handleGuildMemberUpdate(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
@@ -201,7 +213,12 @@ func (b *Bot) handleGuildMemberUpdate(s *discordgo.Session, m *discordgo.GuildMe
 		return
 	}
 
-	oldMember, exists := b.memberCache[m.GuildID+":"+m.User.ID]
+	// 🔧 FIXED: LRUキャッシュ使用
+	oldMemberInterface, exists := b.memberCache.Get(m.GuildID + ":" + m.User.ID)
+	var oldMember *discordgo.Member
+	if exists {
+		oldMember = oldMemberInterface.(*discordgo.Member)
+	}
 	if !exists {
 		return
 	}
@@ -251,12 +268,13 @@ func (b *Bot) handleGuildMemberUpdate(s *discordgo.Session, m *discordgo.GuildMe
 	}
 	b.db.LogServerEvent(serverLog)
 
-	b.memberCache[m.GuildID+":"+m.User.ID] = &discordgo.Member{
+	// 🔧 FIXED: LRUキャッシュ使用
+	b.memberCache.Set(m.GuildID+":"+m.User.ID, &discordgo.Member{
 		User: m.User,
 		Nick: m.Nick,
 		Roles: m.Roles,
 		JoinedAt: m.JoinedAt,
-	}
+	})
 }
 
 func (b *Bot) handleGuildBanAdd(s *discordgo.Session, m *discordgo.GuildBanAdd) {
