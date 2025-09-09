@@ -2,10 +2,10 @@ package commands
 
 import (
 	"fmt"
-	"strings"
 
 	nyxembed "github.com/Sumire-Labs/Nyx-API/embed"
 	"github.com/Sumire-Labs/Nyx/database"
+	"github.com/Sumire-Labs/Nyx/utils"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -206,7 +206,16 @@ func setupLoggerChannel(ctx *Context) error {
 		return ctx.ReplyError("使用方法: `logger setup #チャンネル名`")
 	}
 
-	channelID := strings.Trim(ctx.Args[1], "<#>")
+	// 🔧 FIXED: 安全なチャンネルID抽出を追加
+	channelID := utils.ExtractChannelIDFromMention(ctx.Args[1])
+	if channelID == "" {
+		return ctx.ReplyError("無効なチャンネルメンション形式です。正しい形式: #チャンネル名")
+	}
+	
+	if !utils.ValidateChannelID(channelID) {
+		return ctx.ReplyError("無効なチャンネルIDです。")
+	}
+
 	channel, err := ctx.Session.Channel(channelID)
 	if err != nil {
 		return ctx.ReplyError("指定されたチャンネルが見つかりません")

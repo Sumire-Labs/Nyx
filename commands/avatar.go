@@ -2,9 +2,9 @@ package commands
 
 import (
 	"fmt"
-	"strings"
 
 	nyxembed "github.com/Sumire-Labs/Nyx-API/embed"
+	"github.com/Sumire-Labs/Nyx/utils"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -40,8 +40,16 @@ func executeAvatar(ctx *Context) error {
 	var targetUser *discordgo.User
 	
 	if len(ctx.Args) > 0 {
-		// メンションからユーザーIDを抽出
-		userID := strings.Trim(ctx.Args[0], "<@!>")
+		// 🔧 FIXED: 安全な入力検証を追加
+		userID := utils.ExtractUserIDFromMention(ctx.Args[0])
+		if userID == "" {
+			return ctx.ReplyError("無効なユーザーメンション形式です。正しい形式: @user")
+		}
+		
+		if !utils.ValidateDiscordID(userID) {
+			return ctx.ReplyError("無効なユーザーIDです。")
+		}
+		
 		user, err := ctx.Session.User(userID)
 		if err != nil {
 			return ctx.ReplyError("指定されたユーザーが見つかりませんでした。")

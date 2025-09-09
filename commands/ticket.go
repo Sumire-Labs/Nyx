@@ -7,6 +7,7 @@ import (
 	nyxcomponents "github.com/Sumire-Labs/Nyx-API/components"
 	nyxembed "github.com/Sumire-Labs/Nyx-API/embed"
 	"github.com/Sumire-Labs/Nyx/database"
+	"github.com/Sumire-Labs/Nyx/utils"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -81,10 +82,18 @@ func executeTicketCreate(ctx *Context) error {
 	description := "下のボタンをクリックしてサポートチケットを作成してください。"
 
 	if len(ctx.Args) > 1 {
-		title = ctx.Args[1]
+		// 🔧 FIXED: タイトル入力検証を追加
+		if err := utils.ValidateMessageContent(ctx.Args[1]); err != nil {
+			return ctx.ReplyError("無効なタイトルです: " + err.Error())
+		}
+		title = utils.SanitizeInput(ctx.Args[1])
 	}
 	if len(ctx.Args) > 2 {
-		description = ctx.Args[2]
+		// 🔧 FIXED: 説明入力検証を追加
+		if err := utils.ValidateMessageContent(ctx.Args[2]); err != nil {
+			return ctx.ReplyError("無効な説明です: " + err.Error())
+		}
+		description = utils.SanitizeInput(ctx.Args[2])
 	}
 
 	return createTicketPanel(ctx.Session, ctx.Message.ChannelID, ctx.Message.GuildID, ctx.DB, title, description)
@@ -98,9 +107,17 @@ func executeTicketCreateSlash(ctx *SlashContext) error {
 	for _, option := range options {
 		switch option.Name {
 		case "title":
-			title = option.StringValue()
+			// 🔧 FIXED: スラッシュコマンドでもタイトル検証追加
+			if err := utils.ValidateMessageContent(option.StringValue()); err != nil {
+				return ctx.ReplyError("無効なタイトルです: "+err.Error(), true)
+			}
+			title = utils.SanitizeInput(option.StringValue())
 		case "description":
-			description = option.StringValue()
+			// 🔧 FIXED: スラッシュコマンドでも説明検証追加
+			if err := utils.ValidateMessageContent(option.StringValue()); err != nil {
+				return ctx.ReplyError("無効な説明です: "+err.Error(), true)
+			}
+			description = utils.SanitizeInput(option.StringValue())
 		}
 	}
 
